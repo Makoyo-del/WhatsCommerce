@@ -1,0 +1,10 @@
+node_modules
+.next
+.env
+.env.local
+.env.example
+.env*.local
+seed-menu.js
+
+.vercel
+.env*.local

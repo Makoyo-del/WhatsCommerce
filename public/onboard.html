@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsCommerce — SME Onboarding Portal</title>
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- jsPDF Library for client-side contract compiler -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --panel: #111827;
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --primary: #10b981; /* Emerald green */
+      --primary-glow: rgba(16, 185, 129, 0.15);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 650px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 800;
+      font-size: 2rem;
+      background: linear-gradient(135deg, #34d399, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input, select {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      color: var(--text);
+      font-size: 1rem;
+      transition: all 0.25s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 10px var(--primary-glow);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    .agreement-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1.75rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .agreement-box input[type="checkbox"] {
+      width: auto;
+      margin-top: 0.25rem;
+      cursor: pointer;
+    }
+
+    .agreement-text {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .agreement-text a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .agreement-text a:hover {
+      text-decoration: underline;
+    }
+
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #10b981, #059669);
+      border: none;
+      border-radius: 10px;
+      padding: 1rem;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn:disabled {
+      background: #374151;
+      color: #6b7280;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Terminal QR Console */
+    .console-box {
+      margin-top: 2rem;
+      background: #000;
+      border: 1px solid var(--panel-border);
+      border-radius: 15px;
+      padding: 1.5rem;
+      text-align: center;
+      display: none;
+      animation: fadeIn 0.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .console-header {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      margin-bottom: 1rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      color: #4b5563;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
+
+    .qr-container {
+      background: white;
+      padding: 1rem;
+      border-radius: 12px;
+      display: inline-block;
+      margin: 1rem 0;
+    }
+
+    .qr-container img {
+      display: block;
+      width: 220px;
+      height: 220px;
+    }
+
+    .console-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.9rem;
+      color: var(--primary);
+      margin-top: 0.75rem;
+    }
+
+    .alert {
+      padding: 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+      display: none;
+      font-size: 0.9rem;
+    }
+
+    .alert-danger {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    .success-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.09);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>🏪 Onboard Your Store</h1>
+    <p class="subtitle">WhatsCommerce SME Onboarding Portal</p>
+
+    <div id="errorAlert" class="alert alert-danger"></div>
+
+    <form id="onboardForm" onsubmit="handleOnboard(event)">
+      
+      <div class="form-group">
+        <label for="businessName">Business Name</label>
+        <input type="text" id="businessName" placeholder="Mama Wanjiru's Kitchen" required>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="ownerEmail">Business Email</label>
+          <input type="email" id="ownerEmail" placeholder="wanjiru@kitchen.com" required>
+        </div>
+        <div class="form-group">
+          <label for="ownerPhone">WhatsApp Phone Number</label>
+          <input type="text" id="ownerPhone" placeholder="0712345678" required>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="splitModel">Subscription Model</label>
+          <select id="splitModel" onchange="toggleModelFields()" required>
+            <option value="commission">Model B: 5% Transaction Split (KSh 0/mo)</option>
+            <option value="flat">Model A: Flat Plan (KSh 3,500/mo)</option>
+          </select>
+        </div>
+
+        <!-- Dynamic Fields -->
+        <div class="form-group" id="payoutPhoneGroup">
+          <label for="payoutPhone">M-Pesa Payout Number</label>
+          <input type="text" id="payoutPhone" placeholder="0712345678">
+        </div>
+        <div class="form-group" id="tillNumberGroup" style="display: none;">
+          <label for="tillNumber">Lipa na M-Pesa Till Number</label>
+          <input type="text" id="tillNumber" placeholder="9110">
+        </div>
+      </div>
+
+      <div class="agreement-box">
+        <input type="checkbox" id="acceptContract" onchange="toggleSubmitBtn()">
+        <div class="agreement-text">
+          I contractually agree to the <a href="#" onclick="triggerSaaSContract(event)">Merchant SaaS Service Agreement</a>. I acknowledge that I am independent, hold the developer harmless, and consent to weekly active database record pruning.
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn" disabled>Initialize Storefront</button>
+    </form>
+
+    <!-- Onboarding Scan Console -->
+    <div id="consoleConsole" class="console-box">
+      <div class="console-header">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span>wanjiru-kitchen@whatscommerce:~</span>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 0.85rem; font-family: monospace;">[System] Instance initialized successfully. Syncing QR.</p>
+      
+      <div class="qr-container">
+        <img id="qrImage" src="" alt="Scan WhatsApp QR">
+      </div>
+
+      <p class="console-text">▲ SCAN QR CODE WITH WHATSAPP TO GO LIVE</p>
+      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; font-family: monospace;">Go to Linked Devices -> Link a Device on your merchant phone.</p>
+      
+      <div class="success-actions">
+        <button id="downloadPdfBtn" class="btn btn-secondary" onclick="generateSignedContractPDF()">Download Signed SaaS Contract (PDF)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Toggle conditional form fields based on Subscription Model selection
+    function toggleModelFields() {
+      const splitModel = document.getElementById('splitModel').value;
+      const payoutPhoneGroup = document.getElementById('payoutPhoneGroup');
+      const tillNumberGroup = document.getElementById('tillNumberGroup');
+
+      if (splitModel === 'flat') {
+        payoutPhoneGroup.style.display = 'none';
+        tillNumberGroup.style.display = 'block';
+        document.getElementById('tillNumber').setAttribute('required', 'true');
+        document.getElementById('payoutPhone').removeAttribute('required');
+      } else {
+        payoutPhoneGroup.style.display = 'block';
+        tillNumberGroup.style.display = 'none';
+        document.getElementById('payoutPhone').setAttribute('required', 'true');
+        document.getElementById('tillNumber').removeAttribute('required');
+      }
+    }
+
+    // Toggle Submit Button state based on Checkbox selection
+    function toggleSubmitBtn() {
+      const isAccepted = document.getElementById('acceptContract').checked;
+      document.getElementById('submitBtn').disabled = !isAccepted;
+    }
+
+    // Trigger local download of SaaS Contract terms prior to form submit
+    function triggerSaaSContract(e) {
+      e.preventDefault();
+      alert(
+        "MERCHANT SERVICE AGREEMENT HIGHLIGHTS:\n\n" +
+        "1. Developer Status: The Developer is an independent provider, not your partner or corporate agent.\n" +
+        "2. Indemnification: You hold the Developer 100% harmless from customer disputes, product lawsuits, and losses.\n" +
+        "3. Data Pruning: Active orders are pruned weekly. You must download and keep your weekly PDF ledgers safe.\n" +
+        "4. Soft-Lock: Bots are suspended if flat subscription invoices are unpaid."
+      );
+    }
+
+    // Handle Form submission and trigger backend onboarding route
+    async function handleOnboard(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      const errorAlert = document.getElementById('errorAlert');
+      errorAlert.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Provisioning Storefront...";
+
+      const payload = {
+        businessName: document.getElementById('businessName').value,
+        ownerEmail: document.getElementById('ownerEmail').value,
+        ownerPhone: document.getElementById('ownerPhone').value,
+        splitModel: document.getElementById('splitModel').value,
+        payoutPhone: document.getElementById('payoutPhone').value || null,
+        tillNumber: document.getElementById('tillNumber').value || null
+      };
+
+      try {
+        // Point fetch to Next.js hosted API route
+        const res = await fetch('/api/onboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to complete onboarding request.');
+        }
+
+        // Show WhatsApp QR code Console
+        document.getElementById('onboardForm').style.display = 'none';
+        const consoleBox = document.getElementById('consoleConsole');
+        consoleBox.style.display = 'block';
+
+        // Load base64 image or pairing code
+        const qrImg = document.getElementById('qrImage');
+        qrImg.src = data.qrcode.startsWith('data:') ? data.qrcode : `data:image/png;base64,${data.qrcode}`;
+
+        // Save metadata on window context for the PDF generator
+        window.merchantMeta = {
+          name: payload.businessName,
+          email: payload.ownerEmail,
+          phone: payload.ownerPhone,
+          model: payload.splitModel === 'flat' ? 'Flat Monthly (KES 3,500)' : '5% Commission Split (KES 0)',
+          settlement: payload.splitModel === 'flat' ? `M-Pesa Till: ${payload.tillNumber}` : `M-Pesa Payout: ${payload.payoutPhone}`,
+          date: new Date().toLocaleDateString()
+        };
+
+      } catch (err) {
+        errorAlert.innerText = `❌ Error: ${err.message}`;
+        errorAlert.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Initialize Storefront";
+      }
+    }
+
+    // Dynamic Client-side jsPDF contract compilation
+    function generateSignedContractPDF() {
+      const meta = window.merchantMeta;
+      if (!meta) return;
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFont('helvetica', 'normal');
+      let y = 20;
+
+      // Header
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      doc.text('MERCHANT SERVICE AGREEMENT', 15, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`WhatsCommerce SaaS Software Gateway Bridge License`, 15, y);
+      y += 4;
+      doc.line(15, y, 195, y);
+      y += 10;
+
+      // Metadata Table
+      doc.setFillColor(243, 244, 246);
+      doc.rect(15, y, 180, 42, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.text('ONBOARDING RECORD METADATA', 18, y + 6);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Merchant Name:  ${meta.name}`, 18, y + 14);
+      doc.text(`Contact Info:   ${meta.email}  |  Phone: ${meta.phone}`, 18, y + 21);
+      doc.text(`Billing Model:  ${meta.model}`, 18, y + 28);
+      doc.text(`Settlement Ref: ${meta.settlement}`, 18, y + 35);
+      y += 50;
+
+      // Clauses
+      doc.setFont('helvetica', 'bold');
+      doc.text('1. License Scope & Software Gateway', 15, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+      doc.text('The Developer grants the Merchant a revocable SaaS gateway bridge license to automate M-Pesa checkouts', 15, y);
+      y += 5;
+      doc.text('and WhatsApp menus. The Developer owns the IP. The Merchant owns and operates the storefront.', 15, y);
+      y += 12;
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('2. Independent Status (No Partnership)', 15, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+      doc.text('The Developer is an independent provider. There is no partnership, joint venture, agency, or corporate', 15, y);
+      y += 5;
+      doc.text('relationship between the parties. The Developer assumes no liability for merchant operations.', 15, y);
+      y += 12;
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('3. Full Indemnification & Complete Liability Protection', 15, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+      doc.text('The Merchant agrees to indemnify, defend, and hold the Developer harmless from all client complaints, defect', 15, y);
+      y += 5;
+      doc.text('lawsuits, delivery failures, or M-Pesa transaction disputes arising from their business transactions.', 15, y);
+      y += 12;
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('4. Weekly Database Record Minimization & Pruning', 15, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+      doc.text('The Merchant explicitly consents to weekly database pruning. All transaction records are cleared from live', 15, y);
+      y += 5;
+      doc.text('database active tables. The Merchant is solely responsible for downloading their weekly PDF financial ledgers.', 15, y);
+      y += 15;
+
+      // Signatures
+      doc.line(15, y, 90, y);
+      doc.line(120, y, 195, y);
+      y += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Technology Provider / Developer', 15, y);
+      doc.text('Merchant / Store Owner', 120, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('WhatsCommerce Automated Signature', 15, y);
+      doc.text(`Digitally Signed on ${meta.date}`, 120, y);
+
+      // Download PDF file
+      doc.save(`Signed-Merchant-Agreement-${meta.name.replace(/\s+/g, '-')}.pdf`);
+    }
+  </script>
+</body>
+</html>
