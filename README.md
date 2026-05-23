@@ -26,11 +26,11 @@ WhatsCommerce is packaged as a **single, multi-process Docker bundle** controlle
 
 ```mermaid
 graph TD
-    Public[Public Internet / Render Router] -->|Exposes Port 3000| NJS[Next.js Server: Port 3000]
+    Public["Public Internet / Render Router"] -->|Exposes Port 3000| NJS["Next.js Server: Port 3000"]
     
-    subgraph Single Docker Container (Render $7/mo Starter)
-        NJS <-->|Internal Loopback: 127.0.0.1| EVO[Evolution API: Port 8080]
-        EVO -->|Local callback: http://127.0.0.1:3000/api/webhook| NJS
+    subgraph SingleContainer ["Single Docker Container (Render $7/mo Starter)"]
+        NJS <-->|"Internal Loopback (127.0.0.1)"| EVO["Evolution API: Port 8080"]
+        EVO -->|"Local Callback Webhook"| NJS
     end
 ```
 
