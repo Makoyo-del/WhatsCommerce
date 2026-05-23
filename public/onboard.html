@@ -327,7 +327,7 @@
         <div class="dot dot-red"></div>
         <div class="dot dot-yellow"></div>
         <div class="dot dot-green"></div>
-        <span>wanjiru-kitchen@whatscommerce:~</span>
+        <span id="terminalTitle">wanjiru-kitchen@whatscommerce:~</span>
       </div>
       
       <p style="color: #6b7280; font-size: 0.85rem; font-family: monospace;">[System] Instance initialized successfully. Syncing QR.</p>
@@ -420,6 +420,9 @@
         document.getElementById('onboardForm').style.display = 'none';
         const consoleBox = document.getElementById('consoleConsole');
         consoleBox.style.display = 'block';
+
+        // Dynamically update terminal window title
+        document.getElementById('terminalTitle').innerText = `${instanceName}@whatscommerce:~`;
 
         // Load base64 image or pairing code
         const qrImg = document.getElementById('qrImage');
