@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
         }
       );
       
-      // Evolution API connects base64 code under code or base64 keys
-      qrcodeBase64 = qrRes.data.code || qrRes.data.base64 || '';
+      // Evolution API connects base64 code under base64 or code keys
+      qrcodeBase64 = qrRes.data.base64 || qrRes.data.code || '';
     } catch (qrErr: any) {
       console.error(`[Evolution Connect Error] Failed to fetch QR code:`, qrErr.message);
     }
