@@ -69,8 +69,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # Evolution API Internal Loopback Settings
 EVOLUTION_API_URL=http://127.0.0.1:8080
-EVOLUTION_API_KEY=apikey_whatscommerce_dev_2026
-EVOLUTION_WEBHOOK_TOKEN=whatscommerce_webhook_secure_token_2026
+EVOLUTION_API_KEY=your_evolution_api_key_here
+EVOLUTION_WEBHOOK_TOKEN=your_evolution_webhook_token_here
 
 # PayHero Kenya Credentials
 PAYHERO_API_USERNAME=your_payhero_api_username
@@ -79,7 +79,7 @@ PAYHERO_PLATFORM_CHANNEL_ID=your_platform_master_paybill_or_till
 
 # General Configuration & Cron Secrets
 BASE_URL=https://your-app-name.onrender.com
-CRON_SECRET=cron_pruning_secret_2026_abc123
+CRON_SECRET=your_cron_weekly_pruning_secret_here
 ```
 
 ### 3. Deploy to Render ($7 Starter Tier)
