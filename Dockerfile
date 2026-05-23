@@ -19,6 +19,8 @@ WORKDIR /evolution
 RUN apk add --no-cache git
 RUN git clone --depth 1 -b main https://github.com/evolution-foundation/evolution-api.git .
 RUN npm ci
+ENV DATABASE_PROVIDER=postgresql
+RUN npm run db:generate
 RUN npm run build
 
 # ── STAGE 3: FINAL PRODUCTION RUNNER ──────────────────────────────────────────
