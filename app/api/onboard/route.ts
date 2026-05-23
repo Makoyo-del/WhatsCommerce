@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Format instance name from business name (alphanumeric only)
-    const instanceName = businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const instanceSlug = businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const instanceName = `${instanceSlug}-${Math.random().toString(36).substring(2, 6)}`;
 
     // 2. Register Merchant Profile in Supabase
     // Format phone to E.164 (+254...)
@@ -88,7 +89,8 @@ export async function POST(req: NextRequest) {
         {
           instanceName: instanceName,
           token: `token_${instanceName}_${Date.now().toString().slice(-6)}`,
-          qrcode: true
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS'
         },
         {
           headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' }
