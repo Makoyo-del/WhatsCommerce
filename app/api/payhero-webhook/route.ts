@@ -24,6 +24,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // 1.5. Intercept and handle dynamic shop subscription renewals
+    if (orderId.startsWith('renew_')) {
+      const shopId = orderId.replace('renew_', '');
+      
+      const { data: shop } = await supabase
+        .from('shops')
+        .select('*, owner:profiles!owner_id(*)')
+        .eq('id', shopId)
+        .single();
+
+      if (!shop || !shop.owner) {
+        console.error('[PayHero Webhook] Renewal failed: Shop or owner not found for ID:', shopId);
+        return NextResponse.json({ ok: true });
+      }
+
+      const currentExpiry = shop.subscription_expires_at ? new Date(shop.subscription_expires_at) : new Date();
+      const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
+      const newExpiry = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      await supabase
+        .from('shops')
+        .update({ 
+          is_active: true, 
+          subscription_expires_at: newExpiry 
+        })
+        .eq('id', shopId);
+
+      await messenger.sendText(
+        shop.owner.whatsapp_id,
+        `✅ *WhatsCommerce Subscription Renewed!*\n\n` +
+        `Thank you for your payment of *KSh ${amountPaid.toLocaleString()}*.\n\n` +
+        `Your WhatsApp storefront *${shop.name}* has been successfully reactivated and is valid for another 30 days!\n\n` +
+        `📅 New Expiration: *${new Date(newExpiry).toLocaleDateString()}*\n\n` +
+        `Let's keep selling! 🚀`,
+        shop.wa_instance_name
+      );
+
+      return NextResponse.json({ ok: true });
+    }
+
     // 2. Fetch order details from database
     const { data: order } = await supabase
       .from('orders')

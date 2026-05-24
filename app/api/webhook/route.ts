@@ -146,16 +146,46 @@ export async function POST(req: NextRequest) {
     }
     console.log(`[Webhook Success] Resolved shop: ${shop.name} (ID: ${shop.id}), is_approved: ${shop.is_approved}, is_active: ${shop.is_active}`);
 
-    // Check manual approval gate
-    if (!shop.is_approved || !shop.is_active) {
+    // Check manual approval and subscription expiration gate
+    const now = new Date();
+    const isExpired = shop.split_model === 'flat' && 
+                      shop.subscription_expires_at && 
+                      new Date(shop.subscription_expires_at) < now;
+
+    if (isExpired || !shop.is_approved || !shop.is_active) {
       const senderJid = body.data?.key?.remoteJid || '';
       const cleanSender = senderJid.split('@')[0];
-      await messenger.sendText(
-        cleanSender,
-        `⚠️ *Store Currently Inactive*\n\nThis WhatsApp storefront is currently inactive or pending administrative onboarding/approval. Please contact the administrator.`,
-        instance
-      );
-      return NextResponse.json({ ok: true });
+      const { data: ownerProfile } = await supabase.from('profiles').select('id').eq('whatsapp_id', `+${cleanSender}`).maybeSingle();
+      const isOwner = (ownerProfile && ownerProfile.id === shop.owner_id) || body.data?.key?.fromMe;
+
+      // If it's a customer, show offline notice
+      if (!isOwner) {
+        if (isExpired && shop.is_active) {
+          // Auto-disable in database to save future cycles
+          await supabase.from('shops').update({ is_active: false }).eq('id', shop.id);
+        }
+        await messenger.sendText(
+          cleanSender,
+          `⚠️ *Store Currently Offline*\n\nThis storefront is currently offline due to a pending monthly subscription renewal. Please contact the seller directly to complete your purchase.`,
+          instance
+        );
+        return NextResponse.json({ ok: true });
+      }
+      
+      // If the owner themselves is texting their expired/inactive shop, let them process /renew or /help!
+      const text = body.data?.message?.conversation || body.data?.message?.extendedTextMessage?.text || '';
+      const lowerText = text.toLowerCase().trim();
+      
+      if (lowerText !== '/renew' && lowerText !== '/help') {
+        await messenger.sendText(
+          cleanSender,
+          `⚠️ *WhatsCommerce Subscription Expired!*\n\n` +
+          `Your storefront *${shop.name}* is paused because your flat monthly subscription has expired.\n\n` +
+          `👉 *How to renew instantly:* Reply with \`/renew\` right here to trigger an KSh 3,500 M-Pesa STK Push prompt to your phone and instantly reactivate your storefront!`,
+          instance
+        );
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // 5. Parse WhatsApp Payload Fields
@@ -294,6 +324,21 @@ async function handleMessage(
       return;
     }
 
+    if (lowerText === '/renew') {
+      await sendMessage(senderId, `📲 *Initiating secure M-Pesa STK Push for subscription renewal...*\n\nAmount: *KSh 3,500*\nService: *WhatsCommerce 30-Day License*`, instance);
+      try {
+        await payhero.initiateStkPush(
+          senderId,
+          3500,
+          `renew_${shop.id}`,
+          { split_model: 'flat', merchant_till_number: process.env.PAYHERO_PLATFORM_CHANNEL_ID }
+        );
+      } catch (err: any) {
+        await sendMessage(senderId, `❌ Failed to initiate payment: ${err.message}`, instance);
+      }
+      return;
+    }
+
     if (lowerText === '/help') {
       await sendMessage(senderId,
         `📖 *Admin Commands:*\n\n` +
@@ -304,7 +349,8 @@ async function handleMessage(
         `📈 */report weekly* — Generate weekly A4 PDF report\n` +
         `🗑️ */delete [Name]* — Remove product\n` +
         `📦 */orders* — Today's paid orders\n` +
-        `📍 \`/delivery [Details]\` — Update delivery areas`,
+        `📍 \`/delivery [Details]\` — Update delivery areas\n` +
+        `🔄 \`/renew\` — Renew monthly license (KSh 3,500)`,
         instance
       );
       return;
@@ -360,10 +406,11 @@ async function handleMessage(
       `• View active menu: \`/list\`\n` +
       `• Delete a product: \`/delete [Name]\`\n` +
       `• Update delivery details: \`/delivery [New Details]\`\n\n` +
-      `📊 *Business Ledger & Analytics:*\n` +
+      `📊 *Business Ledger, Analytics & Billing:*\n` +
       `• Daily business ledger PDF: \`/report daily\`\n` +
       `• Weekly business ledger PDF: \`/report weekly\`\n` +
-      `• Today's paid order list: \`/orders\`\n\n` +
+      `• Today's paid order list: \`/orders\`\n` +
+      `• Renew 30-day monthly license: \`/renew\` (KSh 3,500)\n\n` +
       `💡 *Tip:* Type \`/help\` at any time to display this menu.\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━`,
       instance
