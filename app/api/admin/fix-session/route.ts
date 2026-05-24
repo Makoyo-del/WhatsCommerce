@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       .not('wa_instance_name', 'is', null);
 
     const validInstances = new Set((activeShops || []).map((s: any) => s.wa_instance_name));
-    results.validDBInstances = [...validInstances];
+    results.validDBInstances = Array.from(validInstances);
 
     // 3. Delete ghost instances (in Evolution but NOT in DB)
     const ghosts = allInstances.filter(name => !validInstances.has(name));
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     // 4. Logout active instances to clear corrupted Signal sessions
     // This forces the merchant to re-scan QR — required after SessionError decryption failures
     const logoutResults = [];
-    for (const instanceName of validInstances) {
+    for (const instanceName of Array.from(validInstances)) {
       try {
         await axios.delete(`${EVOLUTION_API_URL}/instance/logout/${instanceName}`, {
           headers: { apikey: EVOLUTION_API_KEY },
