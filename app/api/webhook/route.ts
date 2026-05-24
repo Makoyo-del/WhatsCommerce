@@ -444,7 +444,9 @@ async function handleMessage(
       }
       if (invalid) break;
 
-      const total = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+      const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+      const deliveryFee = Number(shop.delivery_fee ?? 0);
+      const grandTotal = subtotal + deliveryFee;
 
       // Build summary
       let summary = `🛒 *Order Summary*\n━━━━━━━━━━━━━━━━━━\n`;
@@ -455,7 +457,11 @@ async function handleMessage(
           uniqueItems.push(item);
         }
       }
-      summary += `━━━━━━━━━━━━━━━━━━\n*Total: KSh ${total}*\n\nReply *confirm* to pay using this phone number (${senderId})\nOr reply *confirm [M-Pesa Number]* (e.g. *confirm 0712345678*) to pay using a different line.\n\nType *cancel* to start over.`;
+      summary += `━━━━━━━━━━━━━━━━━━\n`;
+      summary += `Subtotal: KSh ${subtotal}\n`;
+      summary += `Delivery: ${deliveryFee > 0 ? `KSh ${deliveryFee}` : 'Free'}\n`;
+      summary += `━━━━━━━━━━━━━━━━━━\n`;
+      summary += `*Total: KSh ${grandTotal}*\n\nReply *confirm* to pay using this phone number (${senderId})\nOr reply *confirm [M-Pesa Number]* (e.g. *confirm 0712345678*) to pay using a different line.\n\nType *cancel* to start over.`;
 
       // 1. Deliver text summary
       await sendMessage(senderId, summary, instance);
@@ -470,7 +476,7 @@ async function handleMessage(
 
       // Save to cart session
       await supabase.from('profiles')
-        .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: cartItems, total, index: productIndex } })
+        .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: cartItems, total: grandTotal, index: productIndex } })
         .eq('whatsapp_id', senderId);
 
       break;
