@@ -113,10 +113,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Filter out bot's own outgoing replies to prevent loops
-    if (body.data?.key?.fromMe) {
-      return NextResponse.json({ ok: true });
-    }
+
 
     // 3. Extract instance details
     const instance = body.instance;
@@ -161,6 +158,12 @@ export async function POST(req: NextRequest) {
     const text = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
     const messageId = body.data?.key?.id || `msg_${Date.now()}`;
     const msgType = body.data?.messageType || 'conversation';
+
+    // 2. Filter out bot's own outgoing replies to prevent loops,
+    // but allow the admin's own manual commands starting with "/"
+    if (body.data?.key?.fromMe && !text.startsWith('/')) {
+      return NextResponse.json({ ok: true });
+    }
 
     // 6. Idempotency Check
     const { data: seen } = await supabase
@@ -214,7 +217,8 @@ async function handleMessage(
   }
 
   const state = profile.state as string;
-  const isMerchantAdmin = profile.role === 'ADMIN' && shop.owner_id === profile.id;
+  const fromMe = messageKey?.fromMe === true;
+  const isMerchantAdmin = (profile.role === 'ADMIN' && shop.owner_id === profile.id) || fromMe;
 
   // ── MERCHANT ADMIN COMMAND FLOW ─────────────────────────────────────────────
   if (isMerchantAdmin) {
