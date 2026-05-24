@@ -139,6 +139,34 @@ export async function POST(req: NextRequest) {
       console.warn(`[Evolution Instance warning] Instance might already exist or creation lagged:`, createErr.response?.data ?? createErr.message);
     }
 
+    // 4b. Configure Webhook for this instance to forward events to Next.js
+    console.log(`[Evolution Onboarding] Setting webhook for ${instanceName}...`);
+    try {
+      const webhookUrl = `${process.env.BASE_URL}/api/webhook`;
+      const webhookToken = process.env.EVOLUTION_WEBHOOK_TOKEN!;
+      
+      await axios.post(
+        `${EVOLUTION_API_URL}/webhook/set/${instanceName}`,
+        {
+          enabled: true,
+          url: webhookUrl,
+          headers: {
+            "x-webhook-token": webhookToken
+          },
+          events: [
+            "MESSAGES_UPSERT",
+            "CONNECTION_UPDATE"
+          ]
+        },
+        {
+          headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' }
+        }
+      );
+      console.log(`[Evolution Onboarding] Webhook successfully set for ${instanceName}!`);
+    } catch (webErr: any) {
+      console.error(`[Evolution Onboarding Webhook Error] Failed to set webhook:`, webErr.response?.data ?? webErr.message);
+    }
+
     // 5. Retrieve base64 connection QR code
     let qrcodeBase64 = '';
     try {
