@@ -16,13 +16,11 @@ const sendImageMessage = (to: string, url: string, caption: string, instance: st
 /**
  * Downloads media file from Evolution API and decodes the base64 payload
  */
-async function downloadEvolutionMedia(messageKey: any, instance: string): Promise<Buffer> {
+async function downloadEvolutionMedia(messageInfo: any, instance: string): Promise<Buffer> {
   const res = await axios.post(
-    `${EVOLUTION_API_URL}/message/downloadMedia/${instance}`,
+    `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance}`,
     {
-      message: {
-        key: messageKey
-      }
+      message: messageInfo
     },
     {
       headers: { apikey: EVOLUTION_API_KEY }
@@ -37,9 +35,9 @@ async function downloadEvolutionMedia(messageKey: any, instance: string): Promis
 /**
  * Uploads Evolution API message image to Supabase Storage
  */
-async function uploadEvolutionImageToSupabase(messageKey: any, shopId: string, instance: string): Promise<string> {
-  const buffer = await downloadEvolutionMedia(messageKey, instance);
-  const mediaId = messageKey.id || `img_${Date.now()}`;
+async function uploadEvolutionImageToSupabase(messageInfo: any, shopId: string, instance: string): Promise<string> {
+  const buffer = await downloadEvolutionMedia(messageInfo, instance);
+  const mediaId = messageInfo?.key?.id || `img_${Date.now()}`;
   const filename = `products/${shopId}/${mediaId}.jpg`;
 
   const { error } = await supabase.storage
@@ -176,7 +174,7 @@ export async function POST(req: NextRequest) {
     await supabase.from('processed_messages').insert([{ message_id: messageId }]);
 
     // 7. Hand over to Multi-tenant State Machine
-    await handleMessage(senderId, text, msgType, messageId, shop, instance, body.data?.key);
+    await handleMessage(senderId, text, msgType, messageId, shop, instance, body.data);
     return NextResponse.json({ ok: true });
 
   } catch (err: any) {
@@ -192,7 +190,7 @@ async function handleMessage(
   messageId: string, 
   shop: any, 
   instance: string,
-  messageKey?: any
+  messageInfo?: any
 ) {
   const lowerText = text.toLowerCase().trim();
 
@@ -217,7 +215,7 @@ async function handleMessage(
   }
 
   const state = profile.state as string;
-  const fromMe = messageKey?.fromMe === true;
+  const fromMe = messageInfo?.key?.fromMe === true;
   const isMerchantAdmin = (profile.role === 'ADMIN' && shop.owner_id === profile.id) || fromMe;
 
   // ── MERCHANT ADMIN COMMAND FLOW ─────────────────────────────────────────────
@@ -281,7 +279,7 @@ async function handleMessage(
     }
 
     // Image-based /add product with caption parsing
-    const hasImage = msgType === 'imageMessage' || (messageKey && msgType === 'image');
+    const hasImage = msgType === 'imageMessage' || (messageInfo && msgType === 'image');
     if (hasImage && text.startsWith('/add')) {
       const caption = text.replace('/add', '').trim();
       const parts   = caption.split(',').map((s: string) => s.trim());
@@ -293,7 +291,7 @@ async function handleMessage(
       }
       try {
         await sendMessage(senderId, `⏳ *Uploading image to storage...*`, instance);
-        const imageUrl = await uploadEvolutionImageToSupabase(messageKey, shop.id, instance);
+        const imageUrl = await uploadEvolutionImageToSupabase(messageInfo, shop.id, instance);
         await supabase.from('products').insert([{ shop_id: shop.id, name, price, category: category ?? 'General', image_url: imageUrl, is_available: true }]);
         await sendMessage(senderId, `✅ *${name}* (KSh ${price}) [${category ?? 'General'}] added to storefront!`, instance);
       } catch (err: any) {
