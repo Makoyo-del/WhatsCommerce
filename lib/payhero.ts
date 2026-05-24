@@ -43,7 +43,7 @@ export const payhero = {
         'https://backend.payhero.co.ke/api/v2/payments',
         {
           amount: Math.round(amount), // PayHero takes KSh flat
-          phone: cleanPhone,
+          phone_number: cleanPhone,
           channel_id: targetChannel,
           provider: 'safaricom',
           external_reference: orderId,
@@ -76,7 +76,7 @@ export const payhero = {
         'https://backend.payhero.co.ke/api/v2/disbursements',
         {
           amount: Math.round(amount),
-          phone: cleanPhone,
+          phone_number: cleanPhone,
           channel_id: PAYHERO_PLATFORM_CHANNEL_ID,
           provider: 'safaricom',
           external_reference: `payout_${orderId.slice(0, 8)}`,
