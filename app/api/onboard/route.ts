@@ -22,10 +22,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing mandatory onboarding details.' }, { status: 400 });
     }
 
-    // Format instance name from business name (alphanumeric only)
-    const instanceSlug = businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    const instanceName = `${instanceSlug}-${Math.random().toString(36).substring(2, 6)}`;
-
     // 2. Register Merchant Profile in Supabase
     // Format phone to E.164 (+254...)
     let formattedPhone = ownerPhone.replace(/\s+/g, '').replace('+', '');
@@ -55,31 +51,74 @@ export async function POST(req: NextRequest) {
       await supabase.from('profiles').update({ role: 'ADMIN', state: 'REGISTERED' }).eq('id', profile.id);
     }
 
-    // 3. Register Shop in Supabase (Approved automatically via Form portal)
+    // Check if a shop already exists for this owner to make retries fully idempotent
+    const { data: existingShop, error: existShopErr } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('owner_id', profile.id)
+      .maybeSingle();
+
+    if (existShopErr) throw new Error(`Shop lookup failed: ${existShopErr.message}`);
+
+    // If shop already exists, reuse its existing instance slug; otherwise, generate one
+    let instanceName = existingShop?.wa_instance_name;
+    if (!instanceName) {
+      const instanceSlug = businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      instanceName = `${instanceSlug}-${Math.random().toString(36).substring(2, 6)}`;
+    }
+
+    // 3. Register or Update Shop in Supabase (Approved automatically via Form portal)
     const expiresAt = splitModel === 'flat' 
       ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30-day initial trial/paid window
       : null;
 
-    const { data: shop, error: shopErr } = await supabase
-      .from('shops')
-      .insert([{
-        owner_id: profile.id,
-        name: businessName,
-        owner_phone: ownerPhone,
-        contact_email: ownerEmail,
-        is_active: true,
-        is_approved: true,
-        split_model: splitModel,
-        merchant_payout_phone: splitModel === 'commission' ? payoutPhone : null,
-        merchant_till_number: splitModel === 'flat' ? tillNumber : null,
-        wa_instance_name: instanceName,
-        subscription_expires_at: expiresAt,
-        delivery_info: 'Delivery within Nairobi CBD • 30–45 min'
-      }])
-      .select('*')
-      .single();
+    let shop;
+    if (existingShop) {
+      // Update existing shop settings
+      const { data: updatedShop, error: shopErr } = await supabase
+        .from('shops')
+        .update({
+          name: businessName,
+          owner_phone: ownerPhone,
+          contact_email: ownerEmail,
+          is_active: true,
+          is_approved: true,
+          split_model: splitModel,
+          merchant_payout_phone: splitModel === 'commission' ? payoutPhone : null,
+          merchant_till_number: splitModel === 'flat' ? tillNumber : null,
+          wa_instance_name: instanceName,
+          subscription_expires_at: expiresAt
+        })
+        .eq('id', existingShop.id)
+        .select('*')
+        .single();
 
-    if (shopErr) throw new Error(`Shop registration failed: ${shopErr.message}`);
+      if (shopErr) throw new Error(`Shop settings update failed: ${shopErr.message}`);
+      shop = updatedShop;
+    } else {
+      // Insert new shop
+      const { data: newShop, error: shopErr } = await supabase
+        .from('shops')
+        .insert([{
+          owner_id: profile.id,
+          name: businessName,
+          owner_phone: ownerPhone,
+          contact_email: ownerEmail,
+          is_active: true,
+          is_approved: true,
+          split_model: splitModel,
+          merchant_payout_phone: splitModel === 'commission' ? payoutPhone : null,
+          merchant_till_number: splitModel === 'flat' ? tillNumber : null,
+          wa_instance_name: instanceName,
+          subscription_expires_at: expiresAt,
+          delivery_info: 'Delivery within Nairobi CBD • 30–45 min'
+        }])
+        .select('*')
+        .single();
+
+      if (shopErr) throw new Error(`Shop registration failed: ${shopErr.message}`);
+      shop = newShop;
+    }
 
     // 4. Call Evolution API to initialize WhatsApp Session Instance
     console.log(`[Evolution Onboarding] Initializing instance for ${instanceName}...`);
