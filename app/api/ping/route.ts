@@ -8,7 +8,10 @@ const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 
 export async function GET() {
-  const pings: Array<{ shop: string; instance: string; state: string; reconnected: boolean; error?: string }> = [];
+  const pings: Array<{ shop: string; instance: string; state: string; reconnected: boolean; webhookRegistered: boolean; error?: string }> = [];
+
+  const BASE_URL = process.env.BASE_URL;
+  const WEBHOOK_TOKEN = process.env.EVOLUTION_WEBHOOK_TOKEN;
 
   try {
     // 1. Fetch all active and approved merchant shops
@@ -29,22 +32,23 @@ export async function GET() {
 
         let state = 'unknown';
         let reconnected = false;
+        let webhookRegistered = false;
         let errorMsg = undefined;
 
         try {
-          // Query connection state of the instance
+          // Step A: Check connection state
           const stateRes = await axios.get(
             `${EVOLUTION_API_URL}/instance/connectionState/${shop.wa_instance_name}`,
             {
               headers: { apikey: EVOLUTION_API_KEY },
-              timeout: 4000 // 4 seconds timeout per instance check
+              timeout: 4000
             }
           );
           state = stateRes.data?.instance?.state || stateRes.data?.state || 'unknown';
 
-          // If the socket connection is not 'open', call the connect endpoint to trigger reconnect flow
+          // Step B: If disconnected, trigger reconnect
           if (state !== 'open') {
-            console.log(`[Keep-Alive Ping] Session for ${shop.name} (${shop.wa_instance_name}) is ${state}. Re-triggering connection...`);
+            console.log(`[Keep-Alive] Session for ${shop.name} (${shop.wa_instance_name}) is ${state}. Re-triggering connection...`);
             await axios.get(
               `${EVOLUTION_API_URL}/instance/connect/${shop.wa_instance_name}`,
               {
@@ -54,9 +58,38 @@ export async function GET() {
             );
             reconnected = true;
           }
+
+          // Step C: ALWAYS re-register the webhook on every ping cycle.
+          // This is the critical fix: Render container restarts wipe Evolution API's in-memory
+          // webhook registrations. Without re-registering, messages arrive at Evolution API
+          // but are never forwarded to Next.js — making the bot go completely silent.
+          if (BASE_URL && WEBHOOK_TOKEN) {
+            await axios.post(
+              `${EVOLUTION_API_URL}/webhook/set/${shop.wa_instance_name}`,
+              {
+                webhook: {
+                  enabled: true,
+                  url: `${BASE_URL}/api/webhook`,
+                  headers: {
+                    'x-webhook-token': WEBHOOK_TOKEN
+                  },
+                  events: [
+                    'MESSAGES_UPSERT',
+                    'CONNECTION_UPDATE'
+                  ]
+                }
+              },
+              {
+                headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' },
+                timeout: 5000
+              }
+            );
+            webhookRegistered = true;
+          }
+
         } catch (err: any) {
           errorMsg = err.response?.data?.message || err.message;
-          console.error(`[Keep-Alive Ping Warning] Could not maintain session for ${shop.name}:`, errorMsg);
+          console.error(`[Keep-Alive Warning] Could not maintain session for ${shop.name}:`, errorMsg);
         }
 
         pings.push({
@@ -64,6 +97,7 @@ export async function GET() {
           instance: shop.wa_instance_name,
           state,
           reconnected,
+          webhookRegistered,
           ...(errorMsg && { error: errorMsg })
         });
       }
@@ -87,3 +121,4 @@ export async function GET() {
     }, { status: 500 });
   }
 }
+
