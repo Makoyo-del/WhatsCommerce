@@ -276,6 +276,24 @@ async function handleMessage(
       return;
     }
 
+    if (lowerText.startsWith('/delivery ')) {
+      const newDelivery = text.slice(10).trim();
+      if (!newDelivery) {
+        await sendMessage(senderId, `❌ Use:\`/delivery [New Delivery Details]\`\nExample: _/delivery Delivery within Nairobi CBD & Kilimani • KSh 100_`, instance);
+        return;
+      }
+      const { error: shopErr } = await supabase
+        .from('shops')
+        .update({ delivery_info: newDelivery })
+        .eq('id', shop.id);
+      if (shopErr) {
+        await sendMessage(senderId, `❌ Failed to update delivery details: ${shopErr.message}`, instance);
+      } else {
+        await sendMessage(senderId, `✅ *Delivery Details Updated!*\n\nNew Delivery Info:\n"${newDelivery}"`, instance);
+      }
+      return;
+    }
+
     if (lowerText === '/help') {
       await sendMessage(senderId,
         `📖 *Admin Commands:*\n\n` +
@@ -285,7 +303,8 @@ async function handleMessage(
         `📊 */report daily* — Generate daily A4 PDF report\n` +
         `📈 */report weekly* — Generate weekly A4 PDF report\n` +
         `🗑️ */delete [Name]* — Remove product\n` +
-        `📦 */orders* — Today's paid orders`,
+        `📦 */orders* — Today's paid orders\n` +
+        `📍 \`/delivery [Details]\` — Update delivery areas`,
         instance
       );
       return;
@@ -335,11 +354,12 @@ async function handleMessage(
       `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `Welcome back! You are the authorized owner of *${shop.name}*.\n\n` +
       `Here is your direct command control panel. You do not need to guess:\n\n` +
-      `📝 *Manage Your Store Menu:*\n` +
+      `📝 *Manage Your Store Menu & Operations:*\n` +
       `• Add product (with image): Send product photo + caption: \`/add [Name], [Price], [Category]\`\n` +
       `• Add product (text-only): \`/add [Name], [Price], [Category]\`\n` +
       `• View active menu: \`/list\`\n` +
-      `• Delete a product: \`/delete [Name]\`\n\n` +
+      `• Delete a product: \`/delete [Name]\`\n` +
+      `• Update delivery details: \`/delivery [New Details]\`\n\n` +
       `📊 *Business Ledger & Analytics:*\n` +
       `• Daily business ledger PDF: \`/report daily\`\n` +
       `• Weekly business ledger PDF: \`/report weekly\`\n` +
