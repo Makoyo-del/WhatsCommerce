@@ -73,9 +73,7 @@ function buildMenuText(shopName: string, deliveryInfo: string, products: any[]):
     }
   }
 
-  text += `━━━━━━━━━━━━━━━━━━\n`;
-  text += `📍 Delivery: ${deliveryInfo}\n\n`;
-  text += `Reply with item numbers + quantities:\ne.g. *1x2, 3x1* (item×qty)\n\nType *cancel* to start over.`;
+  text += `━━━━━━━━━━━━━━━━━━\n📍 Delivery: ${deliveryInfo}\n━━━━━━━━━━━━━━━━━━\n\nReply with the item number and quantity.\nFor example, to order 2 of item #1 and 1 of item #3, reply:\n1x2, 3x1\n\nType cancel to start over.`;
   return { text, index };
 }
 
@@ -90,6 +88,21 @@ function parseCartReply(raw: string): Array<{ num: number; qty: number }> | null
     result.push({ num: parseInt(match[1]), qty: parseInt(match[2]) });
   }
   return result.length > 0 ? result : null;
+}
+
+// ─── Format and Validate M-Pesa Number ──────────────────────────────────
+function formatMpesaNumber(phone: string): string | null {
+  const clean = phone.replace(/[^\d]/g, '');
+  if (clean.length === 10 && clean.startsWith('0')) {
+    return '254' + clean.slice(1);
+  }
+  if (clean.length === 9 && (clean.startsWith('7') || clean.startsWith('1'))) {
+    return '254' + clean;
+  }
+  if (clean.length === 12 && clean.startsWith('254')) {
+    return clean;
+  }
+  return null;
 }
 
 // GET: Verifies connection endpoint status
@@ -315,6 +328,27 @@ async function handleMessage(
       await sendMessage(senderId, `✅ *${name}* (KSh ${price}) [${category ?? 'General'}] added!\n\n_To add a photo, send the image directly with the caption:_ \`/add ${name}, ${price}, ${category ?? 'General'}\``, instance);
       return;
     }
+
+    // Default admin fallback greeting to present the owner control panel commands instantly
+    await sendMessage(senderId,
+      `🏪 *WhatsCommerce — Merchant Admin Panel*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Welcome back! You are the authorized owner of *${shop.name}*.\n\n` +
+      `Here is your direct command control panel. You do not need to guess:\n\n` +
+      `📝 *Manage Your Store Menu:*\n` +
+      `• Add product (with image): Send product photo + caption: \`/add [Name], [Price], [Category]\`\n` +
+      `• Add product (text-only): \`/add [Name], [Price], [Category]\`\n` +
+      `• View active menu: \`/list\`\n` +
+      `• Delete a product: \`/delete [Name]\`\n\n` +
+      `📊 *Business Ledger & Analytics:*\n` +
+      `• Daily business ledger PDF: \`/report daily\`\n` +
+      `• Weekly business ledger PDF: \`/report weekly\`\n` +
+      `• Today's paid order list: \`/orders\`\n\n` +
+      `💡 *Tip:* Type \`/help\` at any time to display this menu.\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━`,
+      instance
+    );
+    return;
   }
 
   // ── CUSTOMER FLOW (STATE MACHINE) ──────────────────────────────────────────
@@ -370,7 +404,7 @@ async function handleMessage(
       
       if (!parsed) {
         await sendMessage(senderId,
-          `❌ I couldn't understand that format.\n\nReply like this:\n*1x2, 3x1*\n(item number × quantity)\n\nOr type *menu* to see the menu again.`,
+          `❌ I couldn't understand that format.\n\nPlease reply like this:\n1x2, 3x1\n(item number x quantity)\n\nOr type menu to see the menu again.`,
           instance
         );
         break;
@@ -401,7 +435,7 @@ async function handleMessage(
           uniqueItems.push(item);
         }
       }
-      summary += `━━━━━━━━━━━━━━━━━━\n*Total: KSh ${total}*\n\nReply *confirm* to pay or *cancel* to start over.`;
+      summary += `━━━━━━━━━━━━━━━━━━\n*Total: KSh ${total}*\n\nReply *confirm* to pay using this phone number (${senderId})\nOr reply *confirm [M-Pesa Number]* (e.g. *confirm 0712345678*) to pay using a different line.\n\nType *cancel* to start over.`;
 
       // 1. Deliver text summary
       await sendMessage(senderId, summary, instance);
@@ -430,7 +464,7 @@ async function handleMessage(
         break;
       }
 
-      if (lowerText !== 'confirm') {
+      if (!lowerText.startsWith('confirm')) {
         await sendMessage(senderId, `Reply *confirm* to pay or *cancel* to start over.`, instance);
         break;
       }
@@ -454,6 +488,28 @@ async function handleMessage(
         break;
       }
 
+      // Resolve and validate target M-Pesa phone number
+      let mpesaPhone: string | null = null;
+      const customPhoneMatch = text.match(/confirm\s+([\d+]+)/i);
+
+      if (customPhoneMatch) {
+        mpesaPhone = formatMpesaNumber(customPhoneMatch[1]);
+      } else {
+        mpesaPhone = formatMpesaNumber(senderId);
+      }
+
+      if (!mpesaPhone) {
+        await sendMessage(
+          senderId,
+          `⚠️ *Invalid M-Pesa Number*\n\n` +
+          `Your phone number could not be recognized as a valid Kenyan Safaricom line.\n\n` +
+          `Please reply with: *confirm [M-Pesa Number]*\n` +
+          `Example: _confirm 0712345678_`,
+          instance
+        );
+        break;
+      }
+
       // Create PENDING database order
       const { data: order, error: orderErr } = await supabase
         .from('orders')
@@ -471,7 +527,7 @@ async function handleMessage(
         await sendMessage(senderId, `📲 *Initiating secure M-Pesa STK Push...*`, instance);
         
         await payhero.initiateStkPush(
-          senderId,
+          mpesaPhone,
           total,
           order.id,
           shop
@@ -481,14 +537,17 @@ async function handleMessage(
 
         await sendMessage(senderId,
           `📲 *M-Pesa STK Push Sent!*\n\n` +
-          `Amount: *KSh ${total}*\n\n` +
-          `👇 Please check your phone screen, enter your M-Pesa PIN, and click Send.\n\n` +
+          `Amount: *KSh ${total}*\n` +
+          `Target Phone: *0${mpesaPhone.slice(3)}*\n\n` +
+          `👇 Please check the screen of that phone, enter your M-Pesa PIN, and click Send.\n\n` +
           `_You will receive your PDF receipt here instantly once the transaction is completed._`,
           instance
         );
       } catch (err: any) {
         console.error('[PayHero STK Push Error]', err.message);
-        await sendMessage(senderId, `❌ Could not initiate M-Pesa STK Push. Please verify your phone number and try again.`, instance);
+        // Delete the pending order from the database since payment initiation failed
+        await supabase.from('orders').delete().eq('id', order.id);
+        await sendMessage(senderId, `❌ Could not initiate M-Pesa STK Push. Please verify the phone number and try again.`, instance);
       }
       break;
     }

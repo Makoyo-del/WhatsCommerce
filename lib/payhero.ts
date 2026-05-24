@@ -45,7 +45,7 @@ export const payhero = {
           amount: Math.round(amount), // PayHero takes KSh flat
           phone_number: cleanPhone,
           channel_id: targetChannel,
-          provider: 'safaricom',
+          provider: 'm-pesa',
           external_reference: orderId,
           callback_url: `${BASE_URL}/api/payhero-webhook`,
         },
@@ -78,7 +78,7 @@ export const payhero = {
           amount: Math.round(amount),
           phone_number: cleanPhone,
           channel_id: PAYHERO_PLATFORM_CHANNEL_ID,
-          provider: 'safaricom',
+          provider: 'm-pesa',
           external_reference: `payout_${orderId.slice(0, 8)}`,
         },
         { headers }

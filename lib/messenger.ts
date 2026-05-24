@@ -87,7 +87,8 @@ export const messenger = {
         {
           number: cleanTo,
           media: imageUrl,
-          mediaType: 'image',
+          mediatype: 'image',
+          mimetype: 'image/jpeg',
           caption: caption || '',
           delay: 1500,
         },
@@ -134,7 +135,8 @@ export const messenger = {
         {
           number: cleanTo,
           media: url,
-          mediaType: 'document',
+          mediatype: 'document',
+          mimetype: 'application/pdf',
           fileName: filename,
           caption: filename,
           delay: 2000,

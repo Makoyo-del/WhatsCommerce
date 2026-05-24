@@ -1,0 +1,14 @@
+name: WhatsCommerce Keep-Alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Run every 5 minutes
+  workflow_dispatch: # Enable manual triggers
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Keep-Alive Ping to Render
+        run: |
+          curl -I -s -o /dev/null -w "%{http_code}" https://whatscommerce.onrender.com/api/ping

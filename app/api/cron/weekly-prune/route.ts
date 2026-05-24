@@ -73,10 +73,20 @@ async function handleWeeklyPrune(req: NextRequest) {
       if (delErr) {
         console.error(`[Prune Error] Failed to delete orders for shop ${shop.name}:`, delErr.message);
       } else {
-        console.log(`[Prune Success] Deleted ${count} orders for shop ${shop.name}`);
+        console.log(`[Prune Success] Deleted ${count} paid orders for shop ${shop.name}`);
         successCount++;
         processedShops.push(shop.name);
       }
+
+      // e. Clean up any unpaid/abandoned pending orders older than 24 hours
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+      await supabase
+        .from('orders')
+        .delete()
+        .eq('shop_id', shop.id)
+        .neq('status', 'PAID')
+        .lte('created_at', oneDayAgo.toISOString());
 
     } catch (err: any) {
       console.error(`[Cron Weekly Prune Error] Failed for shop ${shop.name}:`, err.message);
