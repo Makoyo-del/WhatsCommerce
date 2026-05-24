@@ -103,11 +103,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log(`[Webhook Event Received] Instance: ${body.instance}, Event: ${body.event}`);
 
     // 1. Webhook Signature Authorization Check
     const webhookToken = req.headers.get('x-webhook-token');
+    console.log(`[Webhook Auth Check] Header Token: ${webhookToken ? 'Exists' : 'Missing'}, Expected: ${EVOLUTION_WEBHOOK_TOKEN ? 'Exists' : 'Missing'}`);
     if (webhookToken !== EVOLUTION_WEBHOOK_TOKEN) {
-      console.warn('[Webhook Warning] Unauthorized webhook request ignored.');
+      console.warn('[Webhook Warning] Unauthorized webhook request ignored. Received: ' + webhookToken);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -123,6 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Resolve the merchant shop from instance
+    console.log(`[Webhook Db Lookup] Finding shop for wa_instance_name: ${instance}...`);
     const { data: shop } = await supabase
       .from('shops')
       .select('*')
@@ -130,9 +133,10 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!shop) {
-      console.warn(`[Webhook Warning] Shop not resolved for instance: ${instance}`);
+      console.warn(`[Webhook Warning] Shop not resolved in database for instance: ${instance}`);
       return NextResponse.json({ ok: true });
     }
+    console.log(`[Webhook Success] Resolved shop: ${shop.name} (ID: ${shop.id}), is_approved: ${shop.is_approved}, is_active: ${shop.is_active}`);
 
     // Check manual approval gate
     if (!shop.is_approved || !shop.is_active) {
