@@ -41,10 +41,14 @@ export async function POST(request: Request) {
     results.allEvolutionInstances = allInstances;
 
     // 2. Get all instance names that are currently valid in the DB
-    const { data: activeShops } = await supabase
+    const { data: activeShops, error: shopsErr } = await supabase
       .from('shops')
       .select('wa_instance_name, name')
       .not('wa_instance_name', 'is', null);
+
+    if (shopsErr) {
+      results.dbError = shopsErr.message;
+    }
 
     const validInstances = new Set((activeShops || []).map((s: any) => s.wa_instance_name));
     results.validDBInstances = Array.from(validInstances);
