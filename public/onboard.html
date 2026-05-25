@@ -295,7 +295,7 @@
         <div class="form-group">
           <label for="splitModel">Subscription Model</label>
           <select id="splitModel" onchange="toggleModelFields()" required>
-            <option value="commission">Model B: 5% Transaction Split (KSh 0/mo)</option>
+            <option value="commission">Model B: Platform Service Fee (KSh 0/mo to Merchant)</option>
             <option value="flat">Model A: Flat Plan (KSh 3,500/mo)</option>
           </select>
         </div>
@@ -379,8 +379,9 @@
         "MERCHANT SERVICE AGREEMENT HIGHLIGHTS:\n\n" +
         "1. Developer Status: The Developer is an independent provider, not your partner or corporate agent.\n" +
         "2. Indemnification: You hold the Developer 100% harmless from customer disputes, product lawsuits, and losses.\n" +
-        "3. Data Pruning: Active orders are pruned weekly. You must download and keep your weekly PDF ledgers safe.\n" +
-        "4. Soft-Lock: Bots are suspended if flat subscription invoices are unpaid."
+        "3. Platform Service Fee: Under Model B, a KSh 30 service fee is charged to customers. Merchants receive 100% of their menu prices.\n" +
+        "4. Data Pruning: Active orders are pruned weekly. You must download and keep your weekly PDF ledgers safe.\n" +
+        "5. Soft-Lock: Bots are suspended if flat subscription invoices are unpaid."
       );
     }
 
@@ -433,7 +434,7 @@
           name: payload.businessName,
           email: payload.ownerEmail,
           phone: payload.ownerPhone,
-          model: payload.splitModel === 'flat' ? 'Flat Monthly (KES 3,500)' : '5% Commission Split (KES 0)',
+          model: payload.splitModel === 'flat' ? 'Flat Monthly (KES 3,500)' : 'Platform Service Fee (KES 0 for Merchant)',
           settlement: payload.splitModel === 'flat' ? `M-Pesa Till: ${payload.tillNumber}` : `M-Pesa Payout: ${payload.payoutPhone}`,
           date: new Date().toLocaleDateString()
         };
