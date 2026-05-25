@@ -188,7 +188,7 @@ export const messenger = {
           number: cleanTo,
           title,
           description,
-          footer: footerText,
+          footerText,
           buttons: buttons.map(btn => ({
             buttonId: btn.id,
             buttonText: {
@@ -251,7 +251,7 @@ export const messenger = {
           title,
           description,
           buttonText,
-          footer: footerText,
+          footerText,
           sections: sections.map(sec => ({
             title: sec.title,
             rows: sec.rows.map(row => ({

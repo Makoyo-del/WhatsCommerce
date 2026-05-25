@@ -27,7 +27,7 @@ export async function POST(request: Request) {
         title: "Test Menu",
         description: "Please select an option",
         buttonText: "Open Menu",
-        footer: "Powered by WhatsCommerce",
+        footerText: "Powered by WhatsCommerce",
         sections: [
           {
             title: "Test Section",
