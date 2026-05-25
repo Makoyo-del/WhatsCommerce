@@ -695,7 +695,8 @@ async function handleMessage(
           // Calculate totals
           const subtotal = currentCart.reduce((sum, item) => sum + item.price * item.qty, 0);
           const deliveryFee = Number(shop.delivery_fee ?? 0);
-          const grandTotal = subtotal + deliveryFee;
+          const serviceFee = shop.split_model === 'commission' ? 30 : 0;
+          const grandTotal = subtotal + deliveryFee + serviceFee;
 
           // Move to 'cart' view
           await supabase.from('profiles')
@@ -718,6 +719,9 @@ async function handleMessage(
           summary += `━━━━━━━━━━━━━━━━━━\n`;
           summary += `Subtotal: KSh ${subtotal}\n`;
           summary += `Delivery: ${deliveryFee > 0 ? `KSh ${deliveryFee}` : 'Free'}\n`;
+          if (serviceFee > 0) {
+            summary += `Service Fee: KSh ${serviceFee}\n`;
+          }
           summary += `━━━━━━━━━━━━━━━━━━\n`;
           summary += `*Total: KSh ${grandTotal}*\n\n`;
           summary += `Reply with:\n`;
@@ -755,7 +759,8 @@ async function handleMessage(
 
             const subtotal = currentCart.reduce((sum, item) => sum + item.price * item.qty, 0);
             const deliveryFee = Number(shop.delivery_fee ?? 0);
-            const grandTotal = subtotal + deliveryFee;
+            const serviceFee = shop.split_model === 'commission' ? 30 : 0;
+            const grandTotal = subtotal + deliveryFee + serviceFee;
 
             await supabase.from('profiles')
               .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: currentCart, total: grandTotal } })

@@ -122,8 +122,8 @@ export async function POST(req: NextRequest) {
 
     // 5. IF MODEL B (COMMISSION SPLIT) -> EXECUTE PROGRAMMATIC INSTANT PAYOUT
     if (shop.split_model === 'commission') {
-      // Calculate 95% merchant share (deducting your 5% platform cut upfront)
-      const merchantShare = Math.round(amountPaid * 0.95);
+      // Disburse exactly 100% of the merchant's listed price + delivery (amountPaid minus the KSh 30 platform service fee paid by the customer)
+      const merchantShare = Math.max(0, Math.round(amountPaid - 30));
       
       if (shop.merchant_payout_phone) {
         console.log(`[PayHero Split Split] Triggering instant B2C split payout: KSh ${merchantShare} to ${shop.merchant_payout_phone}`);
