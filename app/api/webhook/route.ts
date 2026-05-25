@@ -105,6 +105,44 @@ function formatMpesaNumber(phone: string): string | null {
   return null;
 }
 
+/**
+ * Dynamically builds and delivers a WhatsApp interactive categories menu list.
+ */
+async function sendCategoriesMenu(senderId: string, shop: any, instance: string) {
+  const { data: products } = await supabase
+    .from('products')
+    .select('category')
+    .eq('shop_id', shop.id)
+    .eq('is_available', true);
+
+  if (!products || products.length === 0) {
+    await messenger.sendText(senderId, `*${shop.name}* has no products available yet! Check back soon.`, instance);
+    return;
+  }
+
+  // Extract unique categories and filter out nulls/blanks
+  const categories = Array.from(new Set(products.map((p: any) => p.category ?? 'General'))).filter(Boolean);
+
+  await messenger.sendList(
+    senderId,
+    `🛍️ Welcome to *${shop.name}*!`,
+    `Please tap below to select a category and view our catalog menu:`,
+    `📂 View Categories`,
+    [
+      {
+        title: "Shop Categories",
+        rows: categories.map(cat => ({
+          id: `cat_${cat}`,
+          title: cat,
+          description: `View items under ${cat}`
+        }))
+      }
+    ],
+    `Powered by WhatsCommerce`,
+    instance
+  );
+}
+
 // GET: Verifies connection endpoint status
 export async function GET() {
   return NextResponse.json({ active: true, service: 'WhatsCommerce Webhook' });
@@ -196,12 +234,20 @@ export async function POST(req: NextRequest) {
     const msg = body.data?.message;
     if (!msg) return NextResponse.json({ ok: true });
 
-    const text = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
+    let text = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
+
+    const buttonReply = msg.buttonsResponseMessage || msg.templateButtonReplyMessage;
+    const listReply = msg.listResponseMessage;
+
+    if (buttonReply) {
+      text = buttonReply.selectedButtonId || buttonReply.selectedId || buttonReply.selectedDisplayText || text;
+    } else if (listReply) {
+      text = listReply.singleSelectReply?.selectedRowId || listReply.title || text;
+    }
+
     const messageId = body.data?.key?.id || `msg_${Date.now()}`;
     const msgType = body.data?.messageType || 'conversation';
 
-    // 2. Filter out bot's own outgoing replies to prevent loops,
-    // but allow the admin's own manual commands starting with "/"
     if (body.data?.key?.fromMe && !text.startsWith('/')) {
       return NextResponse.json({ ok: true });
     }
@@ -423,26 +469,22 @@ async function handleMessage(
 
     // ── START ─────────────────────────────────────────────────────────────────
     case 'START': {
-      if (['browse', 'menu', 'shop', 'hi', 'hello'].includes(lowerText)) {
-        const { data: products } = await supabase.from('products').select('*').eq('shop_id', shop.id).eq('is_available', true).order('category').order('created_at', { ascending: true });
-        if (!products || products.length === 0) { 
-          await sendMessage(senderId, `*${shop.name}* has no products yet! Check back soon.`, instance); 
-          break; 
-        }
-        const { text: menuText, index } = buildMenuText(shop.name, shop.delivery_info ?? 'Within Nairobi CBD', products);
-        
+      if (['browse', 'menu', 'shop', 'hi', 'hello', 'btn_menu'].includes(lowerText)) {
+        await sendCategoriesMenu(senderId, shop, instance);
         await supabase.from('profiles')
-          .update({ state: 'CART_REVIEW', state_data: { shop_id: shop.id, index } })
+          .update({ state: 'CART_REVIEW', state_data: { shop_id: shop.id, cart: [] } })
           .eq('id', profile.id);
-
-        await sendMessage(senderId, menuText, instance);
         break;
       }
 
-      await sendMessage(senderId,
-        `👋 Welcome to *${shop.name}*!\n\n` +
-        `Order food and essentials directly here and check out instantly via M-Pesa.\n\n` +
-        `Reply *BROWSE* or *MENU* to see what is available! 🛍️`,
+      await messenger.sendButtons(
+        senderId,
+        `👋 Welcome to *${shop.name}*!`,
+        `Order food and essentials directly here and check out instantly via M-Pesa.`,
+        [
+          { id: 'btn_menu', label: '🛍️ Browse Menu' }
+        ],
+        `WhatsCommerce Store`,
         instance
       );
       break;
@@ -450,108 +492,299 @@ async function handleMessage(
 
     // ── CART_REVIEW ───────────────────────────────────────────────────────────
     case 'CART_REVIEW': {
-      if (lowerText === 'cancel') {
+      const stateData = (profile.state_data as any) || { cart: [] };
+      const currentCart: Array<{ product_id: string; name: string; price: number; qty: number }> = stateData.cart || [];
+
+      if (lowerText === 'cancel' || lowerText === 'btn_cancel') {
         await supabase.from('profiles').update({ state: 'START', state_data: null }).eq('whatsapp_id', senderId);
-        await sendMessage(senderId, `🔄 Cancelled. Type *menu* to browse again.`, instance);
-        break;
-      }
-
-      if (lowerText === 'menu' || lowerText === 'hi') {
-        const { data: products } = await supabase.from('products').select('*').eq('shop_id', shop.id).eq('is_available', true).order('category').order('created_at', { ascending: true });
-        if (!products) break;
-        const { text: menuText, index } = buildMenuText(shop.name, shop.delivery_info ?? 'Within Nairobi CBD', products);
-        await supabase.from('profiles').update({ state_data: { shop_id: shop.id, index } }).eq('whatsapp_id', senderId);
-        await sendMessage(senderId, menuText, instance);
-        break;
-      }
-
-      const stateData = profile.state_data as any;
-      const productIndex = stateData?.index ?? {};
-      const parsed = parseCartReply(text);
-      
-      if (!parsed) {
-        await sendMessage(senderId,
-          `❌ I couldn't understand that format.\n\nPlease reply like this:\n1x2, 3x1\n(item number x quantity)\n\nOr type menu to see the menu again.`,
+        await messenger.sendButtons(
+          senderId,
+          `🔄 Shop Session Reset`,
+          `Your active shopping session has been cleared. Tap below to start over.`,
+          [
+            { id: 'btn_menu', label: '🛍️ Open Menu' }
+          ],
+          `WhatsCommerce Store`,
           instance
         );
         break;
       }
 
-      // Validate all items exist in index
-      const cartItems: Array<{ product_id: string; name: string; price: number; qty: number }> = [];
-      let invalid = false;
-      for (const { num, qty } of parsed) {
-        const prod = productIndex[num];
-        if (!prod || qty < 1) { 
-          await sendMessage(senderId, `❌ Item *#${num}* not found. Type *menu* to see valid items.`, instance); 
-          invalid = true; 
-          break; 
-        }
-        cartItems.push({ product_id: prod.id, name: prod.name, price: prod.price, qty });
-      }
-      if (invalid) break;
-
-      const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
-      const deliveryFee = Number(shop.delivery_fee ?? 0);
-      const grandTotal = subtotal + deliveryFee;
-
-      // Build summary
-      let summary = `🛒 *Order Summary*\n━━━━━━━━━━━━━━━━━━\n`;
-      const uniqueItems: any[] = [];
-      for (const item of cartItems) {
-        summary += `• ${item.name} ×${item.qty}  → KSh ${item.price * item.qty}\n`;
-        if (!uniqueItems.find(u => u.product_id === item.product_id)) {
-          uniqueItems.push(item);
-        }
-      }
-      summary += `━━━━━━━━━━━━━━━━━━\n`;
-      summary += `Subtotal: KSh ${subtotal}\n`;
-      summary += `Delivery: ${deliveryFee > 0 ? `KSh ${deliveryFee}` : 'Free'}\n`;
-      summary += `━━━━━━━━━━━━━━━━━━\n`;
-      summary += `*Total: KSh ${grandTotal}*\n\nReply *confirm* to pay using this phone number (${senderId})\nOr reply *confirm [M-Pesa Number]* (e.g. *confirm 0712345678*) to pay using a different line.\n\nType *cancel* to start over.`;
-
-      // 1. Deliver text summary
-      await sendMessage(senderId, summary, instance);
-
-      // 2. Deliver product photos for item verification
-      for (const item of uniqueItems) {
-        const prodData = Object.values(productIndex).find((p: any) => p.id === item.product_id) as any;
-        if (prodData?.image_url) {
-          await sendImageMessage(senderId, prodData.image_url, `📸 *${item.name}*`, instance);
-        }
+      if (lowerText === 'menu' || lowerText === 'hi' || lowerText === 'btn_menu') {
+        await sendCategoriesMenu(senderId, shop, instance);
+        break;
       }
 
-      // Save to cart session
-      await supabase.from('profiles')
-        .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: cartItems, total: grandTotal, index: productIndex } })
-        .eq('whatsapp_id', senderId);
+      // Action A: Category chosen from bottom sheet
+      if (lowerText.startsWith('cat_')) {
+        const categoryName = text.slice(4).trim();
+        const { data: products } = await supabase
+          .from('products')
+          .select('*')
+          .eq('shop_id', shop.id)
+          .eq('category', categoryName)
+          .eq('is_available', true);
 
+        if (!products || products.length === 0) {
+          await sendMessage(senderId, `No items found in *${categoryName}*.`, instance);
+          await sendCategoriesMenu(senderId, shop, instance);
+          break;
+        }
+
+        await messenger.sendList(
+          senderId,
+          `📋 ${categoryName}`,
+          `Select an item from the list below to view details and add to cart:`,
+          `🛍️ View Products`,
+          [
+            {
+              title: categoryName,
+              rows: products.map(p => ({
+                id: `prod_${p.id}`,
+                title: p.name,
+                description: `KSh ${p.price}`
+              }))
+            }
+          ],
+          `WhatsCommerce Menu`,
+          instance
+        );
+        break;
+      }
+
+      // Action B: Product chosen from category sheet
+      if (lowerText.startsWith('prod_')) {
+        const prodId = text.slice(5).trim();
+        const { data: prod, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', prodId)
+          .single();
+
+        if (error || !prod) {
+          await sendMessage(senderId, `❌ Product not found.`, instance);
+          await sendCategoriesMenu(senderId, shop, instance);
+          break;
+        }
+
+        if (prod.image_url) {
+          await sendImageMessage(senderId, prod.image_url, `📸 *${prod.name}*`, instance);
+        }
+
+        await messenger.sendButtons(
+          senderId,
+          `🛒 ${prod.name}`,
+          `Price: *KSh ${prod.price}*\nCategory: _${prod.category ?? 'General'}_\n\nSelect a quantity below to add to your cart:`,
+          [
+            { id: `btn_add1_${prod.id}`, label: '➕ Add 1' },
+            { id: `btn_add2_${prod.id}`, label: '➕ Add 2' },
+            { id: 'btn_menu', label: '🔙 Main Menu' }
+          ],
+          `WhatsCommerce Store`,
+          instance
+        );
+        break;
+      }
+
+      // Action C: Add item quantity chosen
+      if (lowerText.startsWith('btn_add')) {
+        const match = lowerText.match(/^btn_add(\d+)_(.+)$/);
+        if (!match) {
+          await sendMessage(senderId, `❌ Invalid quantity action.`, instance);
+          break;
+        }
+
+        const qty = parseInt(match[1]);
+        const prodId = match[2];
+
+        const { data: prod, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', prodId)
+          .single();
+
+        if (error || !prod) {
+          await sendMessage(senderId, `❌ Product details not found.`, instance);
+          break;
+        }
+
+        // Update cart memory
+        const existingIdx = currentCart.findIndex(item => item.product_id === prod.id);
+        if (existingIdx > -1) {
+          currentCart[existingIdx].qty += qty;
+        } else {
+          currentCart.push({
+            product_id: prod.id,
+            name: prod.name,
+            price: prod.price,
+            qty
+          });
+        }
+
+        // Calculate totals
+        const subtotal = currentCart.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const deliveryFee = Number(shop.delivery_fee ?? 0);
+        const grandTotal = subtotal + deliveryFee;
+
+        // Build Order Summary
+        let summary = `🛒 *Order Summary Update*\n━━━━━━━━━━━━━━━━━━\n`;
+        const uniqueItems: any[] = [];
+        for (const item of currentCart) {
+          summary += `• ${item.name} ×${item.qty}  → KSh ${item.price * item.qty}\n`;
+          if (!uniqueItems.find(u => u.product_id === item.product_id)) {
+            uniqueItems.push(item);
+          }
+        }
+        summary += `━━━━━━━━━━━━━━━━━━\n`;
+        summary += `Subtotal: KSh ${subtotal}\n`;
+        summary += `Delivery: ${deliveryFee > 0 ? `KSh ${deliveryFee}` : 'Free'}\n`;
+        summary += `━━━━━━━━━━━━━━━━━━\n`;
+        summary += `*Total: KSh ${grandTotal}*\n\nTap *Checkout* to complete your payment, *Browse Menu* to add more, or *Empty Cart* to clear.`;
+
+        // Update profile cart in DB
+        await supabase.from('profiles')
+          .update({ state_data: { shop_id: shop.id, cart: currentCart, total: grandTotal } })
+          .eq('whatsapp_id', senderId);
+
+        await messenger.sendButtons(
+          senderId,
+          `🛒 Cart Updated!`,
+          summary,
+          [
+            { id: 'btn_checkout', label: '📲 Checkout & Pay' },
+            { id: 'btn_menu', label: '🛍️ Add More' },
+            { id: 'btn_empty', label: '🗑️ Empty Cart' }
+          ],
+          `WhatsCommerce Cart`,
+          instance
+        );
+        break;
+      }
+
+      // Action D: Empty Cart action
+      if (lowerText === 'btn_empty') {
+        await supabase.from('profiles').update({ state_data: { shop_id: shop.id, cart: [] } }).eq('whatsapp_id', senderId);
+        await sendMessage(senderId, `🗑️ Cart cleared successfully!`, instance);
+        await sendCategoriesMenu(senderId, shop, instance);
+        break;
+      }
+
+      // Action E: Proceed to Checkout
+      if (lowerText === 'btn_checkout') {
+        if (currentCart.length === 0) {
+          await sendMessage(senderId, `🛒 Your cart is currently empty!`, instance);
+          await sendCategoriesMenu(senderId, shop, instance);
+          break;
+        }
+
+        const subtotal = currentCart.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const deliveryFee = Number(shop.delivery_fee ?? 0);
+        const grandTotal = subtotal + deliveryFee;
+
+        await supabase.from('profiles')
+          .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: currentCart, total: grandTotal } })
+          .eq('whatsapp_id', senderId);
+
+        await messenger.sendButtons(
+          senderId,
+          `📲 Secure Checkout`,
+          `Grand Total: *KSh ${grandTotal}*\n\nWould you like to initiate M-Pesa payment to your current WhatsApp number *${senderId}*?`,
+          [
+            { id: 'btn_pay_now', label: '🟢 Yes, Pay Now' },
+            { id: 'btn_change_phone', label: '✏️ Use Other Line' },
+            { id: 'btn_cancel', label: '❌ Cancel' }
+          ],
+          `WhatsCommerce Checkout`,
+          instance
+        );
+        break;
+      }
+
+      // Fallback for manual parser (typing text instead of clicking buttons)
+      const parsed = parseCartReply(text);
+      if (parsed) {
+        // Fallback backward compatibility: manual typing still builds cart correctly
+        const { data: allProducts } = await supabase.from('products').select('*').eq('shop_id', shop.id).eq('is_available', true);
+        const pIndex: Record<number, any> = {};
+        let num = 1;
+        if (allProducts) {
+          for (const p of allProducts) {
+            pIndex[num] = p;
+            num++;
+          }
+        }
+
+        const cartItems: Array<{ product_id: string; name: string; price: number; qty: number }> = [];
+        let invalid = false;
+        for (const { num: n, qty: q } of parsed) {
+          const prod = pIndex[n];
+          if (!prod || q < 1) { 
+            await sendMessage(senderId, `❌ Item *#${n}* not found. Type *menu* to see valid items.`, instance); 
+            invalid = true; 
+            break; 
+          }
+          cartItems.push({ product_id: prod.id, name: prod.name, price: prod.price, qty: q });
+        }
+        if (invalid) break;
+
+        const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+        const deliveryFee = Number(shop.delivery_fee ?? 0);
+        const grandTotal = subtotal + deliveryFee;
+
+        await supabase.from('profiles')
+          .update({ state: 'CART_CONFIRM', state_data: { shop_id: shop.id, cart: cartItems, total: grandTotal } })
+          .eq('whatsapp_id', senderId);
+
+        await messenger.sendButtons(
+          senderId,
+          `📲 Secure Checkout`,
+          `Grand Total: *KSh ${grandTotal}*\n\nWould you like to initiate M-Pesa payment to your current WhatsApp number *${senderId}*?`,
+          [
+            { id: 'btn_pay_now', label: '🟢 Yes, Pay Now' },
+            { id: 'btn_change_phone', label: '✏️ Use Other Line' },
+            { id: 'btn_cancel', label: '❌ Cancel' }
+          ],
+          `WhatsCommerce Checkout`,
+          instance
+        );
+        break;
+      }
+
+      await sendMessage(senderId, `❌ Tap *🛍️ Open Menu* or type *menu* to see the active selections.`, instance);
       break;
     }
 
     // ── CART_CONFIRM ──────────────────────────────────────────────────────────
     case 'CART_CONFIRM': {
-      if (lowerText === 'cancel') {
+      if (lowerText === 'cancel' || lowerText === 'btn_cancel') {
         await supabase.from('profiles').update({ state: 'START', state_data: null }).eq('whatsapp_id', senderId);
         await sendMessage(senderId, `🔄 Order cancelled. Type *menu* to start over.`, instance);
-        break;
-      }
-
-      if (!lowerText.startsWith('confirm')) {
-        await sendMessage(senderId, `Reply *confirm* to pay or *cancel* to start over.`, instance);
         break;
       }
 
       const stateData = profile.state_data as any;
       const { cart, total } = stateData ?? {};
 
-      if (!cart) {
+      if (!cart || !total) {
         await supabase.from('profiles').update({ state: 'START', state_data: null }).eq('whatsapp_id', senderId);
         await sendMessage(senderId, `Something went wrong. Type *menu* to start over.`, instance);
         break;
       }
 
-      // Verify payment routing credentials exist based on shop split model
+      // Action A: Request to use another phone number
+      if (lowerText === 'btn_change_phone') {
+        await sendMessage(
+          senderId,
+          `✏️ *Change M-Pesa Number*\n\n` +
+          `Please reply with:\n` +
+          `*confirm [M-Pesa Number]*\n\n` +
+          `Example: _confirm 0712345678_`,
+          instance
+        );
+        break;
+      }
+
+      // Check split routing setup
       const canCollect = 
         (shop.split_model === 'flat' && shop.merchant_till_number) ||
         (shop.split_model === 'commission' && shop.merchant_payout_phone);
@@ -561,13 +794,13 @@ async function handleMessage(
         break;
       }
 
-      // Resolve and validate target M-Pesa phone number
+      // Resolve phone
       let mpesaPhone: string | null = null;
       const customPhoneMatch = text.match(/confirm\s+([\d+]+)/i);
 
       if (customPhoneMatch) {
         mpesaPhone = formatMpesaNumber(customPhoneMatch[1]);
-      } else {
+      } else if (lowerText === 'btn_pay_now' || lowerText.startsWith('confirm')) {
         mpesaPhone = formatMpesaNumber(senderId);
       }
 
@@ -575,7 +808,6 @@ async function handleMessage(
         await sendMessage(
           senderId,
           `⚠️ *Invalid M-Pesa Number*\n\n` +
-          `Your phone number could not be recognized as a valid Kenyan Safaricom line.\n\n` +
           `Please reply with: *confirm [M-Pesa Number]*\n` +
           `Example: _confirm 0712345678_`,
           instance
@@ -585,10 +817,10 @@ async function handleMessage(
 
       // Create PENDING database order
       const { data: order, error: orderErr } = await supabase
-        .from('orders')
-        .insert([{ shop_id: shop.id, customer_whatsapp: senderId, total_price: total, status: 'PENDING', items: cart }])
-        .select()
-        .single();
+          .from('orders')
+          .insert([{ shop_id: shop.id, customer_whatsapp: senderId, total_price: total, status: 'PENDING', items: cart }])
+          .select()
+          .single();
 
       if (orderErr || !order) {
         console.error('[DB] Order insert error:', orderErr?.message);
@@ -618,7 +850,6 @@ async function handleMessage(
         );
       } catch (err: any) {
         console.error('[PayHero STK Push Error]', err.message);
-        // Delete the pending order from the database since payment initiation failed
         await supabase.from('orders').delete().eq('id', order.id);
         await sendMessage(senderId, `❌ Could not initiate M-Pesa STK Push. Please verify the phone number and try again.`, instance);
       }

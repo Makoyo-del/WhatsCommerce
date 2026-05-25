@@ -155,4 +155,140 @@ export const messenger = {
       );
     }
   },
+
+  /**
+   * Sends quick reply buttons (up to 3)
+   */
+  async sendButtons(
+    to: string,
+    title: string,
+    description: string,
+    buttons: Array<{ id: string; label: string }>,
+    footerText = 'WhatsCommerce',
+    instanceName?: string
+  ) {
+    const instance = instanceName || DEFAULT_INSTANCE;
+
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.warn('[Messenger] Evolution API not configured. Buttons:', title);
+      return;
+    }
+
+    if (to.includes('demo')) {
+      console.log(`[Messenger Demo] Sending buttons to ${to} via ${instance}:`, { title, description, buttons });
+      return;
+    }
+
+    const cleanTo = this.formatNumber(to);
+
+    try {
+      await axios.post(
+        `${EVOLUTION_API_URL}/message/sendButton/${instance}`,
+        {
+          number: cleanTo,
+          title,
+          description,
+          footer: footerText,
+          buttons: buttons.map(btn => ({
+            buttonId: btn.id,
+            buttonText: {
+              displayText: btn.label
+            },
+            type: 1
+          }))
+        },
+        {
+          headers: {
+            apikey: EVOLUTION_API_KEY,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (err: any) {
+      console.error(
+        `[Messenger SendButtons Error - Instance: ${instance}]`,
+        JSON.stringify(err.response?.data ?? err.message)
+      );
+      // Fallback: Send as plain text with instruction
+      const fallbackText = `*${title}*\n${description}\n\n` + 
+        buttons.map((btn, idx) => `• *${btn.label}* (reply with _${btn.label.toLowerCase()}_)`).join('\n') +
+        `\n\n_${footerText}_`;
+      await this.sendText(to, fallbackText, instance);
+    }
+  },
+
+  /**
+   * Sends a beautiful interactive bottom sheet list (up to 10 rows)
+   */
+  async sendList(
+    to: string,
+    title: string,
+    description: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    footerText = 'WhatsCommerce',
+    instanceName?: string
+  ) {
+    const instance = instanceName || DEFAULT_INSTANCE;
+
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.warn('[Messenger] Evolution API not configured. List:', title);
+      return;
+    }
+
+    if (to.includes('demo')) {
+      console.log(`[Messenger Demo] Sending list to ${to} via ${instance}:`, { title, description, sections });
+      return;
+    }
+
+    const cleanTo = this.formatNumber(to);
+
+    try {
+      await axios.post(
+        `${EVOLUTION_API_URL}/message/sendList/${instance}`,
+        {
+          number: cleanTo,
+          title,
+          description,
+          buttonText,
+          footer: footerText,
+          sections: sections.map(sec => ({
+            title: sec.title,
+            rows: sec.rows.map(row => ({
+              title: row.title,
+              description: row.description || '',
+              rowId: row.id
+            }))
+          }))
+        },
+        {
+          headers: {
+            apikey: EVOLUTION_API_KEY,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (err: any) {
+      console.error(
+        `[Messenger SendList Error - Instance: ${instance}]`,
+        JSON.stringify(err.response?.data ?? err.message)
+      );
+      // Fallback: Send as plain text with options
+      let fallbackText = `*${title}*\n${description}\n\n`;
+      let optNum = 1;
+      const index: Record<number, string> = {};
+      
+      for (const sec of sections) {
+        fallbackText += `*${sec.title.toUpperCase()}*\n`;
+        for (const row of sec.rows) {
+          fallbackText += `${optNum}. *${row.title}*${row.description ? ` - ${row.description}` : ''}\n`;
+          index[optNum] = row.title;
+          optNum++;
+        }
+        fallbackText += '\n';
+      }
+      fallbackText += `Please reply with the option number.\n\n_${footerText}_`;
+      await this.sendText(to, fallbackText, instance);
+    }
+  },
 };
