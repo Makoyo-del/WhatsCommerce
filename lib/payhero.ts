@@ -47,7 +47,7 @@ export const payhero = {
           channel_id: targetChannel,
           provider: 'm-pesa',
           external_reference: orderId,
-          callback_url: `${BASE_URL}/api/payhero-webhook`,
+          callback_url: `${BASE_URL}/api/payhero-webhook?token=${process.env.PAYHERO_WEBHOOK_TOKEN || ''}`,
         },
         { headers }
       );

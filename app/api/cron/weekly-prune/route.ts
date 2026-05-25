@@ -46,7 +46,7 @@ async function handleWeeklyPrune(req: NextRequest) {
 
     try {
       // a. Generate and deliver the A4 Weekly PDF Report URL
-      const reportUrl = `${BASE_URL}/api/report/${shop.id}?range=weekly`;
+      const reportUrl = `${BASE_URL}/api/report/${shop.id}?range=weekly&token=${CRON_SECRET || ''}`;
       const filename = `Weekly-Ledger-${shop.name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
 
       // b. Send PDF document via Evolution API

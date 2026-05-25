@@ -309,7 +309,7 @@ async function handleMessage(
     // a. Report PDF Generation Command
     if (lowerText === '/report daily' || lowerText === '/report weekly') {
       const range = lowerText.includes('daily') ? 'daily' : 'weekly';
-      const reportUrl = `${BASE_URL}/api/report/${shop.id}?range=${range}`;
+      const reportUrl = `${BASE_URL}/api/report/${shop.id}?range=${range}&token=${process.env.CRON_SECRET || ''}`;
       const filename = `${range.charAt(0).toUpperCase() + range.slice(1)}-Ledger-${shop.name.replace(/\s+/g, '-')}.pdf`;
       
       await sendMessage(senderId, `📊 *Generating your A4 ${range} business report...*\nConnecting to secure billing ledger...`, instance);

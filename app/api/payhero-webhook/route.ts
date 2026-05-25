@@ -7,6 +7,16 @@ const BASE_URL = process.env.BASE_URL ?? 'https://opportunities-xi.vercel.app';
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Security Verification: Validate webhook token
+    const { searchParams } = new URL(req.url);
+    const token = searchParams.get('token');
+    const expectedToken = process.env.PAYHERO_WEBHOOK_TOKEN;
+
+    if (!expectedToken || token !== expectedToken) {
+      console.warn('[PayHero Webhook Warning] Unauthorized webhook request ignored.');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
 
     // 1. Verify payment status is successful

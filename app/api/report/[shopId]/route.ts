@@ -8,6 +8,13 @@ export async function GET(
 ) {
   const { shopId } = params;
   const { searchParams } = new URL(req.url);
+  
+  // 0. Security Verification: Validate access token
+  const token = searchParams.get('token');
+  if (!token || token !== process.env.CRON_SECRET) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
   const range = searchParams.get('range') || 'weekly'; // 'daily' or 'weekly'
 
   // 1. Resolve date boundaries
