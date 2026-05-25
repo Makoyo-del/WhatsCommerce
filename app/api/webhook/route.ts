@@ -400,6 +400,37 @@ async function handleMessage(
       return;
     }
 
+    if (lowerText.startsWith('/upgrade ')) {
+      const tillNumber = text.slice(9).trim();
+      if (!tillNumber || isNaN(Number(tillNumber))) {
+        await sendMessage(senderId, `❌ Use:\`/upgrade [M-Pesa Till/Paybill Channel ID]\`\nExample: _/upgrade 9110_`, instance);
+        return;
+      }
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { error: shopErr } = await supabase
+        .from('shops')
+        .update({
+          split_model: 'flat',
+          merchant_till_number: tillNumber,
+          merchant_payout_phone: null,
+          subscription_expires_at: expiresAt,
+          is_active: true
+        })
+        .eq('id', shop.id);
+      if (shopErr) {
+        await sendMessage(senderId, `❌ Upgrade failed: ${shopErr.message}`, instance);
+      } else {
+        await sendMessage(senderId,
+          `🎉 *Congratulations! Your storefront has been upgraded to the Flat SaaS Plan!*\n\n` +
+          `All customer payments will now route directly to your M-Pesa Till *${tillNumber}* with zero platform fees!\n\n` +
+          `📅 30-Day License Expiration: *${new Date(expiresAt).toLocaleDateString()}*\n\n` +
+          `👉 Reply with \`/renew\` at any time to pay your monthly subscription fee (KSh 3,500).`,
+          instance
+        );
+      }
+      return;
+    }
+
     if (lowerText === '/help') {
       await sendMessage(senderId,
         `📖 *Admin Commands:*\n\n` +
@@ -412,7 +443,8 @@ async function handleMessage(
         `📦 */orders* — Today's paid orders\n` +
         `📍 \`/delivery [Details]\` — Update delivery areas\n` +
         `💰 \`/deliveryfee [Amount]\` — Update delivery fee (e.g. _/deliveryfee 150_)\n` +
-        `🔄 \`/renew\` — Renew monthly license (KSh 3,500)`,
+        `🔄 \`/renew\` — Renew monthly license (KSh 3,500)\n` +
+        `🚀 \`/upgrade [Till ID]\` — Upgrade to Flat SaaS plan`,
         instance
       );
       return;
@@ -473,7 +505,8 @@ async function handleMessage(
       `• Daily business ledger PDF: \`/report daily\`\n` +
       `• Weekly business ledger PDF: \`/report weekly\`\n` +
       `• Today's paid order list: \`/orders\`\n` +
-      `• Renew 30-day monthly license: \`/renew\` (KSh 3,500)\n\n` +
+      `• Renew 30-day monthly license: \`/renew\` (KSh 3,500)\n` +
+      `• Upgrade to Flat SaaS plan: \`/upgrade [Till ID]\`\n\n` +
       `💡 *Tip:* Type \`/help\` at any time to display this menu.\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━`,
       instance
