@@ -366,6 +366,25 @@ async function handleMessage(
       return;
     }
 
+    if (lowerText.startsWith('/deliveryfee ')) {
+      const feeStr = text.slice(13).trim();
+      const fee = parseFloat(feeStr);
+      if (isNaN(fee) || fee < 0) {
+        await sendMessage(senderId, `❌ Use:\`/deliveryfee [Amount]\`\nExample: _/deliveryfee 100_ (or _/deliveryfee 0_ for free delivery)`, instance);
+        return;
+      }
+      const { error: shopErr } = await supabase
+        .from('shops')
+        .update({ delivery_fee: fee })
+        .eq('id', shop.id);
+      if (shopErr) {
+        await sendMessage(senderId, `❌ Failed to update delivery fee: ${shopErr.message}`, instance);
+      } else {
+        await sendMessage(senderId, `✅ *Delivery Fee Updated!*\n\nNew Delivery Fee: *KSh ${fee}*`, instance);
+      }
+      return;
+    }
+
     if (lowerText === '/renew') {
       await sendMessage(senderId, `📲 *Initiating secure M-Pesa STK Push for subscription renewal...*\n\nAmount: *KSh 3,500*\nService: *WhatsCommerce 30-Day License*`, instance);
       try {
@@ -392,6 +411,7 @@ async function handleMessage(
         `🗑️ */delete [Name]* — Remove product\n` +
         `📦 */orders* — Today's paid orders\n` +
         `📍 \`/delivery [Details]\` — Update delivery areas\n` +
+        `💰 \`/deliveryfee [Amount]\` — Update delivery fee (e.g. _/deliveryfee 150_)\n` +
         `🔄 \`/renew\` — Renew monthly license (KSh 3,500)`,
         instance
       );
@@ -447,7 +467,8 @@ async function handleMessage(
       `• Add product (text-only): \`/add [Name], [Price], [Category]\`\n` +
       `• View active menu: \`/list\`\n` +
       `• Delete a product: \`/delete [Name]\`\n` +
-      `• Update delivery details: \`/delivery [New Details]\`\n\n` +
+      `• Update delivery details: \`/delivery [New Details]\`\n` +
+      `• Update delivery fee: \`/deliveryfee [Amount]\` (e.g. \`/deliveryfee 150\`)\n\n` +
       `📊 *Business Ledger, Analytics & Billing:*\n` +
       `• Daily business ledger PDF: \`/report daily\`\n` +
       `• Weekly business ledger PDF: \`/report weekly\`\n` +
