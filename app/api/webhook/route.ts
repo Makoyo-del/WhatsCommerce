@@ -431,6 +431,86 @@ async function handleMessage(
       return;
     }
 
+    if (lowerText.startsWith('/dispatch ')) {
+      const orderPrefix = text.slice(10).trim().toLowerCase();
+      if (!orderPrefix) {
+        await sendMessage(senderId, `❌ Use:\`/dispatch [Order ID Prefix]\`\nExample: _/dispatch a7f39d2c_`, instance);
+        return;
+      }
+
+      const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('shop_id', shop.id)
+        .ilike('id', `${orderPrefix}%`)
+        .maybeSingle();
+
+      if (orderErr || !order) {
+        await sendMessage(senderId, `❌ Order prefix "*${orderPrefix}*" not found in your shop.`, instance);
+        return;
+      }
+
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update({ status: 'DISPATCHED' })
+        .eq('id', order.id);
+
+      if (updateErr) {
+        await sendMessage(senderId, `❌ Failed to update order status: ${updateErr.message}`, instance);
+      } else {
+        await sendMessage(senderId, `✅ Order *#${order.id.slice(0, 8)}* marked as *DISPATCHED*. Customer notified.`, instance);
+        
+        await messenger.sendText(
+          order.customer_whatsapp,
+          `🚀 *Your order from ${shop.name} has been dispatched!*\n\n` +
+          `Order: *#${order.id.slice(0, 8)}*\n\n` +
+          `Our delivery rider is on the way and will contact you shortly on this number. 🛵`,
+          instance
+        );
+      }
+      return;
+    }
+
+    if (lowerText.startsWith('/delivered ')) {
+      const orderPrefix = text.slice(11).trim().toLowerCase();
+      if (!orderPrefix) {
+        await sendMessage(senderId, `❌ Use:\`/delivered [Order ID Prefix]\`\nExample: _/delivered a7f39d2c_`, instance);
+        return;
+      }
+
+      const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('shop_id', shop.id)
+        .ilike('id', `${orderPrefix}%`)
+        .maybeSingle();
+
+      if (orderErr || !order) {
+        await sendMessage(senderId, `❌ Order prefix "*${orderPrefix}*" not found in your shop.`, instance);
+        return;
+      }
+
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update({ status: 'DELIVERED' })
+        .eq('id', order.id);
+
+      if (updateErr) {
+        await sendMessage(senderId, `❌ Failed to update order status: ${updateErr.message}`, instance);
+      } else {
+        await sendMessage(senderId, `✅ Order *#${order.id.slice(0, 8)}* marked as *DELIVERED*. Customer notified.`, instance);
+        
+        await messenger.sendText(
+          order.customer_whatsapp,
+          `✅ *Your order from ${shop.name} has been successfully delivered!*\n\n` +
+          `Order: *#${order.id.slice(0, 8)}*\n\n` +
+          `Thank you for ordering via WhatsCommerce! 🙏`,
+          instance
+        );
+      }
+      return;
+    }
+
     if (lowerText === '/help') {
       await sendMessage(senderId,
         `📖 *Admin Commands:*\n\n` +
@@ -501,6 +581,9 @@ async function handleMessage(
       `• Delete a product: \`/delete [Name]\`\n` +
       `• Update delivery details: \`/delivery [New Details]\`\n` +
       `• Update delivery fee: \`/deliveryfee [Amount]\` (e.g. \`/deliveryfee 150\`)\n\n` +
+      `🛵 *Order Fulfillment & Delivery Tracking:*\n` +
+      `• Dispatch an order: \`/dispatch [Order ID]\` (e.g. \`/dispatch a7f39d2c\`)\n` +
+      `• Complete delivery: \`/delivered [Order ID]\` (e.g. \`/delivered a7f39d2c\`)\n\n` +
       `📊 *Business Ledger, Analytics & Billing:*\n` +
       `• Daily business ledger PDF: \`/report daily\`\n` +
       `• Weekly business ledger PDF: \`/report weekly\`\n` +
@@ -527,10 +610,46 @@ async function handleMessage(
         break;
       }
 
+      if (lowerText === 'track' || lowerText === 'status') {
+        const { data: latestOrder, error: orderErr } = await supabase
+          .from('orders')
+          .select('*, shops(*)')
+          .eq('customer_whatsapp', senderId)
+          .in('status', ['PAID', 'DISPATCHED', 'DELIVERED'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (orderErr || !latestOrder) {
+          await messenger.sendText(senderId, `🔍 *Order Tracking*\n\nYou have no active paid orders with this store yet.\n\nReply *menu* to start shopping! 🛍️`, instance);
+          break;
+        }
+
+        let statusText = '🟢 Paid & Preparing';
+        if (latestOrder.status === 'DISPATCHED') {
+          statusText = '🛵 Dispatched & On the Way';
+        } else if (latestOrder.status === 'DELIVERED') {
+          statusText = '✅ Successfully Delivered';
+        }
+
+        let trackingMsg = `🔍 *Order Tracking Summary*\n`;
+        trackingMsg += `━━━━━━━━━━━━━━━━━━\n`;
+        trackingMsg += `Order ID: *#${latestOrder.id.slice(0, 8)}*\n`;
+        trackingMsg += `Store: *${latestOrder.shops?.name || shop.name}*\n`;
+        trackingMsg += `Status: *${statusText}*\n`;
+        trackingMsg += `Date: _${new Date(latestOrder.created_at).toLocaleDateString()}_\n`;
+        trackingMsg += `━━━━━━━━━━━━━━━━━━\n\n`;
+        trackingMsg += `Reply *menu* to browse items or *track* to check status again.`;
+
+        await messenger.sendText(senderId, trackingMsg, instance);
+        break;
+      }
+
       let msg = `👋 *Welcome to ${shop.name}!* \n`;
       msg += `━━━━━━━━━━━━━━━━━━\n`;
       msg += `Order food and essentials directly here and check out instantly via M-Pesa.\n\n`;
-      msg += `👉 Reply with *BROWSE* or *MENU* to see what is available! 🛍️`;
+      msg += `👉 Reply with *BROWSE* or *MENU* to see what is available! 🛍️\n`;
+      msg += `🔍 Reply with *TRACK* at any time to monitor your active order!`;
 
       await messenger.sendText(senderId, msg, instance);
       break;
